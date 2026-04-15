@@ -1,0 +1,29 @@
+services:
+  yumu-home:
+    # ---- build from local source (or use pre-built image) ----
+    # build: .
+    image: ghcr.io/alexing0805/yumu-home:latest
+
+    container_name: yumu-home
+    restart: unless-stopped
+
+    ports:
+      - "3080:8080"   # dashboard at http://<unraid-ip>:3080
+
+    environment:
+      # Home Assistant address (IP:PORT, no http://)
+      - HA_TARGET=192.168.100.50:8123
+
+    # ---- healthcheck ----
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+    # ---- resource limits (optional) ----
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"

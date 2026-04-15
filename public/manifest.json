@@ -1,0 +1,18 @@
+{
+  "name": "yumu-home",
+  "short_name": "yumu",
+  "description": "智能家居仪表盘 — Home Assistant 控制面板",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#21211f",
+  "theme_color": "#21211f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
