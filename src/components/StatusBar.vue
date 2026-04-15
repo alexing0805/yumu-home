@@ -52,7 +52,7 @@ defineEmits<{
       :class="['status-chip', 'metric-chip', 'weather-chip', { 'card-lifted': liftPanel === 'weather' }]"
       @click="$emit('open-panel', 'weather', $event)"
     >
-      <div class="status-copy metric-copy">
+      <div class="status-copy metric-copy metric-copy-inline">
         <span class="status-label">天气</span>
         <strong class="status-metric">{{ wxTemp }}{{ wxUnit }}</strong>
         <small class="status-range">今 {{ wxLow }} / {{ wxHigh }}{{ wxUnit }}</small>
@@ -61,7 +61,7 @@ defineEmits<{
     </button>
 
     <div class="status-chip metric-chip aqi-chip" :class="aqiLevel">
-      <div class="status-copy metric-copy">
+      <div class="status-copy metric-copy metric-copy-inline">
         <span class="status-label">空气质量</span>
         <strong class="status-metric">{{ envPm25 }}</strong>
         <small class="status-range">PM2.5</small>

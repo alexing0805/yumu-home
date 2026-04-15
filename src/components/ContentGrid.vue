@@ -52,6 +52,88 @@ const climateOnCount = computed(() => props.climates.filter((climate) => climate
 const fanOnCount = computed(() => props.fans.filter((fan) => fan.state === 'on').length)
 const climateTitle = computed(() => cleanName(props.climates[0]?.attributes.friendly_name || '空调'))
 const vacuumLabel = computed(() => cleanName(props.vacuumName))
+
+const primaryClimate = computed(() => {
+  return props.climates.find((climate) => climate.state !== 'off' && climate.state !== 'unavailable')
+    ?? props.climates[0]
+    ?? null
+})
+
+const primaryLight = computed(() => {
+  return lightsOn.value[0] ?? props.lights[0] ?? null
+})
+
+const primaryCurtain = computed(() => {
+  return props.curtains.find((curtain) => curtain.state === 'open')
+    ?? props.curtains[0]
+    ?? null
+})
+
+function climateModeLabel(state: string) {
+  const labels: Record<string, string> = {
+    off: '全部关闭',
+    cool: '制冷中',
+    heat: '制热中',
+    dry: '除湿中',
+    fan_only: '送风中',
+    auto: '自动运行',
+    unavailable: '设备离线',
+    unknown: '状态未知',
+  }
+
+  return labels[state] ?? state
+}
+
+const climateHero = computed(() => {
+  const climate = primaryClimate.value
+  if (!climate || climateOnCount.value === 0) return '全部关闭'
+  const target = climate.attributes.temperature ?? climate.attributes.current_temperature
+  if (target !== undefined && target !== null) return `${climateModeLabel(climate.state).replace('中', '')} ${target}°`
+  return climateModeLabel(climate.state)
+})
+
+const climateMeta = computed(() => {
+  if (!props.climates.length) return '暂无空调设备'
+  return `${climateTitle.value} · 已开 ${climateOnCount.value}/${props.climates.length}`
+})
+
+const climateCaption = computed(() => {
+  const fanText = fanOnCount.value > 0 ? `新风 ${fanOnCount.value}/${props.fans.length}` : '新风已关'
+  return `室温 ${props.envTemp}°C · ${fanText}`
+})
+
+const lightsHero = computed(() => {
+  if (!props.lights.length) return '暂无灯光'
+  if (lightsOn.value.length === 0) return '全部关闭'
+  if (lightsOn.value.length === props.lights.length) return '全部开启'
+  if (lightsOn.value.length === 1 && primaryLight.value) return `${cleanName(primaryLight.value.attributes.friendly_name)}开启`
+  return `${lightsOn.value.length} 盏已开`
+})
+
+const lightsMeta = computed(() => `共 ${props.lights.length} 盏灯`)
+
+const lightsCaption = computed(() => {
+  if (lightsOn.value.length === 0) return '空间已进入安静照明状态'
+  return lightsOn.value.slice(0, 2).map((light) => cleanName(light.attributes.friendly_name)).join(' · ')
+})
+
+const curtainHero = computed(() => {
+  if (!props.curtains.length) return '暂无窗帘'
+  if (curtainsOpen.value.length === 0) return '全部关闭'
+  if (curtainsOpen.value.length === props.curtains.length) return '全部开启'
+  return '部分开启'
+})
+
+const curtainMeta = computed(() => `共 ${props.curtains.length} 组窗帘`)
+
+const curtainCaption = computed(() => {
+  const curtain = primaryCurtain.value
+  if (!curtain) return '未检测到窗帘状态'
+  const pos = curtain.attributes.current_position
+  const name = cleanName(curtain.attributes.friendly_name)
+  if (typeof pos === 'number') return `${name} ${pos}%`
+  return curtainsOpen.value.length ? `${name} 已开启` : `${name} 已关闭`
+})
 </script>
 
 <template>
@@ -62,16 +144,14 @@ const vacuumLabel = computed(() => cleanName(props.vacuumName))
       @click="$emit('open-panel', 'climate', $event)"
     >
       <div class="card-label">空调 / 新风</div>
-      <div class="compact-main">{{ climateOnCount }} / {{ climates.length }}</div>
-      <div class="compact-meta-row">
-        <span class="compact-meta-chip">{{ climateTitle }}</span>
-        <span class="compact-meta-chip">新风 {{ fanOnCount }} / {{ fans.length }}</span>
-        <span class="compact-meta-chip">室温 {{ envTemp }}°C</span>
-      </div>
+      <div class="compact-kicker">当前状态</div>
+      <div class="compact-main">{{ climateHero }}</div>
+      <div class="compact-meta">{{ climateMeta }}</div>
+      <div class="compact-caption">{{ climateCaption }}</div>
     </button>
 
     <section class="card scene-card">
-      <div class="card-label">场景</div>
+      <div class="card-label">模式</div>
       <div class="scene-grid">
         <button
           v-for="scene in SCENE_LABELS"
@@ -81,7 +161,6 @@ const vacuumLabel = computed(() => cleanName(props.vacuumName))
           @click="$emit('set-scene', scene.id)"
         >
           <span class="scene-mark">{{ scene.icon }}</span>
-          <span class="scene-name">{{ scene.label }}</span>
         </button>
       </div>
     </section>
@@ -92,22 +171,25 @@ const vacuumLabel = computed(() => cleanName(props.vacuumName))
       @click="$emit('open-panel', 'summary', $event)"
     >
       <div class="card-label">家庭状态</div>
-      <div class="sec-list">
-        <div class="sec-item">
-          <span class="sec-tag">人员</span>
-          <strong>{{ homeMode }}</strong>
+      <div class="family-shell">
+        <div class="family-primary">
+          <div class="compact-kicker family-kicker">当前状态</div>
+          <div class="family-headline">{{ homeMode }}</div>
+          <div class="family-caption">{{ homeSecurity }}</div>
         </div>
-        <div class="sec-item">
-          <span class="sec-tag">安防</span>
-          <strong>{{ homeSecurity }}</strong>
-        </div>
-        <div class="sec-item">
-          <span class="sec-tag">门锁</span>
-          <strong>{{ homeLock }} <small>{{ lockBattery }}%</small></strong>
-        </div>
-        <div class="sec-item">
-          <span class="sec-tag">{{ vacuumLabel }}</span>
-          <strong>{{ vacuumStateLabel(vacuumState) }} <small>{{ vacuumBattery }}%</small></strong>
+        <div class="family-metrics">
+          <div class="family-metric">
+            <span class="sec-tag">门锁</span>
+            <strong>{{ homeLock }}</strong>
+          </div>
+          <div class="family-metric">
+            <span class="sec-tag">电量</span>
+            <strong>{{ lockBattery }}%</strong>
+          </div>
+          <div class="family-metric family-metric-wide">
+            <span class="sec-tag">{{ vacuumLabel }}</span>
+            <strong>{{ vacuumStateLabel(vacuumState) }} <small>{{ vacuumBattery }}%</small></strong>
+          </div>
         </div>
       </div>
     </button>
@@ -118,10 +200,10 @@ const vacuumLabel = computed(() => cleanName(props.vacuumName))
       @click="$emit('open-panel', 'lights', $event)"
     >
       <div class="card-label">灯光</div>
-      <div class="compact-main">{{ lightsOn.length }} / {{ lights.length }}</div>
-      <div class="compact-meta-row">
-        <span class="compact-meta-chip">{{ lightsOn.length ? '已开启' : '已关闭' }}</span>
-      </div>
+      <div class="compact-kicker">照明氛围</div>
+      <div class="compact-main">{{ lightsHero }}</div>
+      <div class="compact-meta">{{ lightsMeta }}</div>
+      <div class="compact-caption">{{ lightsCaption }}</div>
     </button>
 
     <button
@@ -130,10 +212,10 @@ const vacuumLabel = computed(() => cleanName(props.vacuumName))
       @click="$emit('open-panel', 'curtains', $event)"
     >
       <div class="card-label">窗帘</div>
-      <div class="compact-main">{{ curtainsOpen.length }} / {{ curtains.length }}</div>
-      <div class="compact-meta-row">
-        <span class="compact-meta-chip">{{ curtainsOpen.length ? '部分开启' : '全部关闭' }}</span>
-      </div>
+      <div class="compact-kicker">开合状态</div>
+      <div class="compact-main">{{ curtainHero }}</div>
+      <div class="compact-meta">{{ curtainMeta }}</div>
+      <div class="compact-caption">{{ curtainCaption }}</div>
     </button>
 
     <button
