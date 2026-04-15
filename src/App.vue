@@ -9,8 +9,20 @@ import DetailDialog from './components/DetailDialog.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import WeatherDialog from './components/WeatherDialog.vue'
 
-const HA_BASE = import.meta.env.VITE_HA_BASE || localStorage.getItem('yumu.haBase') || '/ha-api'
-const HA_TOKEN = import.meta.env.VITE_HA_TOKEN || localStorage.getItem('yumu.haToken') || ''
+function loadStoredString(key: string, fallback: string) {
+  const val = localStorage.getItem(key)
+  if (val === null) return fallback
+
+  try {
+    const parsed = JSON.parse(val)
+    return typeof parsed === 'string' ? parsed : fallback
+  } catch {
+    return val
+  }
+}
+
+const HA_BASE = loadStoredString('yumu.haBase', import.meta.env.VITE_HA_BASE || '/ha-api')
+const HA_TOKEN = loadStoredString('yumu.haToken', import.meta.env.VITE_HA_TOKEN || '')
 
 const now = ref(new Date())
 const theme = ref<ThemeMode>('charcoal')
@@ -31,7 +43,13 @@ const ha = useHa(() => haBaseKey.value, () => haTokenKey.value)
 
 function loadPref<T>(key: string, def: T): T {
   const val = localStorage.getItem(key)
-  return val !== null ? JSON.parse(val) : def
+  if (val === null) return def
+
+  try {
+    return JSON.parse(val) as T
+  } catch {
+    return typeof def === 'string' ? (val as T) : def
+  }
 }
 
 function savePref(key: string, val: any) {
@@ -48,7 +66,7 @@ const formattedTime = computed(() => {
 
 const formattedDate = computed(() => {
   const d = now.value
-  return `${d.getMonth() + 1}/${d.getDate()} ${WEEKDAY_NAMES[d.getDay()]}`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${WEEKDAY_NAMES[d.getDay()]}`
 })
 
 const resolvedTheme = computed(() => {
@@ -61,19 +79,36 @@ const resolvedTheme = computed(() => {
 
 const detailState = computed(() => {
   switch (activePanel.value) {
-    case 'lights': return { eyebrow: 'Lighting', title: '灯光', summary: '点击控制灯光开关', items: ha.allLights.value }
-    case 'curtains': return { eyebrow: 'Cover', title: '窗帘', summary: '点击开关窗帘', items: ha.allCurtains.value }
-    case 'climate': return { eyebrow: 'HVAC', title: '空调与新风', summary: '设备状态列表', items: [...ha.climateList.value, ...ha.fanList.value] }
-    case 'air': return { eyebrow: 'Environment', title: '室内环境详情', summary: '各传感器实时数据', items: Object.values(ha.envSensors.value).filter(Boolean) as any[] }
-    case 'music': return { eyebrow: 'Media', title: '媒体播放器', summary: '可用的媒体播放器列表', items: ha.mediaPlayers.value }
-    case 'summary': return { eyebrow: 'Security', title: '安防设备', summary: '安防关联设备及传感器状态', items: [ha.person.value, ha.lockDoorState.value, ha.lockArmedState.value, ha.lockBattery.value, ha.vacuum.value].filter(Boolean) as any[] }
+    case 'lights': return { eyebrow: '灯光控制', title: '灯光', summary: '点击下方开关控制各区域灯光。', items: ha.allLights.value }
+    case 'curtains': return { eyebrow: '窗帘控制', title: '窗帘', summary: '可快速开关、停止或拖动到指定开合度。', items: ha.allCurtains.value }
+    case 'climate': return { eyebrow: '空调与新风', title: '空调与新风', summary: '每个区域的空调与新风已合并在同一张控制卡内。', items: [...ha.climateList.value, ...ha.fanList.value] }
+    case 'air': return { eyebrow: '室内环境', title: '室内环境详情', summary: '查看室内外温湿度、空气质量等实时数据。', items: Object.values(ha.envSensors.value).filter(Boolean) as any[] }
+    case 'music': return { eyebrow: '媒体播放', title: '媒体播放器', summary: '这里展示当前活跃播放器，并支持直接控制。', items: ha.mediaPlayers.value }
+    case 'summary': return { eyebrow: '家庭状态', title: '安防设备', summary: '集中查看人员、门锁、安防和扫地机状态。', items: [ha.person.value, ha.lockDoorState.value, ha.lockArmedState.value, ha.lockBattery.value, ha.vacuum.value].filter(Boolean) as any[] }
     default: return null
   }
 })
 
-let clockTimer: number
+let clockTimer: number | null = null
+let clockAlignTimer: number | null = null
 let refreshTimer: number
 let idleTimer: ReturnType<typeof setTimeout>
+let retryTimer: number | null = null
+
+function syncClock() {
+  now.value = new Date()
+}
+
+function startClock() {
+  syncClock()
+
+  const delay = 60000 - (Date.now() % 60000)
+  clockAlignTimer = window.setTimeout(() => {
+    syncClock()
+    clockTimer = window.setInterval(syncClock, 60000)
+    clockAlignTimer = null
+  }, delay)
+}
 
 function resetIdle() {
   screenDimmed.value = false
@@ -95,8 +130,8 @@ onMounted(() => {
   use24Hour.value = loadPref<boolean>('yumu.clock24', use24Hour.value)
   motionEnabled.value = loadPref<boolean>('yumu.motion', motionEnabled.value)
 
-  ha.loadHaStates().then(() => ha.startWebSocket())
-  clockTimer = window.setInterval(() => { now.value = new Date() }, 1000)
+  void handleRetry()
+  startClock()
   refreshTimer = window.setInterval(ha.loadHaStates, 60000)
 
   window.addEventListener('keydown', onKeydown)
@@ -106,11 +141,13 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  window.clearInterval(clockTimer)
+  if (clockTimer !== null) window.clearInterval(clockTimer)
+  if (clockAlignTimer !== null) window.clearTimeout(clockAlignTimer)
   window.clearInterval(refreshTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pointerdown', onActivity)
   window.removeEventListener('pointermove', onActivity)
+  if (retryTimer !== null) window.clearTimeout(retryTimer)
   clearTimeout(idleTimer)
   ha.stopWebSocket()
 })
@@ -143,12 +180,23 @@ async function handleSetScene(id: string) {
 }
 
 async function handleRetry() {
+  ha.stopWebSocket()
   await ha.loadHaStates()
-  ha.startWebSocket()
+  if (!ha.errorText.value) {
+    ha.startWebSocket()
+  }
 }
 
-function setHaBase(v: string) { haBaseKey.value = v; savePref('yumu.haBase', v); handleRetry() }
-function setHaToken(v: string) { haTokenKey.value = v; savePref('yumu.haToken', v); handleRetry() }
+function queueRetry() {
+  if (retryTimer !== null) window.clearTimeout(retryTimer)
+  retryTimer = window.setTimeout(() => {
+    retryTimer = null
+    void handleRetry()
+  }, 0)
+}
+
+function setHaBase(v: string) { haBaseKey.value = v; savePref('yumu.haBase', v); queueRetry() }
+function setHaToken(v: string) { haTokenKey.value = v; savePref('yumu.haToken', v); queueRetry() }
 
 function cycleTheme() {
   const modes: ThemeMode[] = ['charcoal', 'warm', 'auto']
@@ -184,10 +232,14 @@ function toggleMotion() { motionEnabled.value = !motionEnabled.value; savePref('
         :error-text="ha.errorText.value"
         :weather-text="ha.weatherText.value"
         :wx-state="ha.wxState.value"
+        :wx-state-label="ha.wxStateLabel.value"
         :wx-temp="ha.wxTemp.value"
+        :wx-high="ha.wxHigh.value"
+        :wx-low="ha.wxLow.value"
         :wx-unit="ha.wxUnit.value"
         :env-pm25="ha.envPm25.value"
         :aqi-level="ha.aqiLevel.value"
+        :aqi-text="ha.aqiText.value"
         :ws-connected="ha.wsState.value === 'authenticated'"
         :lift-panel="liftPanel"
         @open-panel="openPanel"
@@ -237,10 +289,11 @@ function toggleMotion() { motionEnabled.value = !motionEnabled.value; savePref('
         <Transition name="panel-pop" appear>
           <WeatherDialog
             v-if="dialogMode === 'panel' && activePanel === 'weather'"
-            eyebrow="Weather"
+            eyebrow="天气详情"
             title="天气"
             :weather-text="ha.weatherText.value"
             :wx-state="ha.wxState.value"
+            :wx-state-label="ha.wxStateLabel.value"
             :wx-temp="ha.wxTemp.value"
             :wx-feels="ha.wxFeels.value"
             :wx-hum="ha.wxHum.value"

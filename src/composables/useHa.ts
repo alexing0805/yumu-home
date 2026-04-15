@@ -305,6 +305,7 @@ export function useHa(haBase: () => string, haToken: () => string) {
   const climateTemp = computed(() => primaryClimate.value?.attributes.temperature ?? primaryClimate.value?.attributes.current_temperature ?? '--')
   const weatherText = computed(() => weather.value?.attributes?.friendly_name ?? '天气')
 
+  const todayForecast = computed(() => forecast.value[0] ?? null)
   const envTemp = computed(() => envSensors.value.indoorTemp?.state ?? '--')
   const envHumidity = computed(() => envSensors.value.indoorHumidity?.state ?? '--')
   const envPm25 = computed(() => envSensors.value.indoorPm25?.state ?? '--')
@@ -318,13 +319,48 @@ export function useHa(haBase: () => string, haToken: () => string) {
     if (v <= 115) return 'warn'
     return 'bad'
   })
+  const aqiText = computed(() => {
+    const labels: Record<string, string> = {
+      unknown: '未知',
+      good: '优',
+      moderate: '良',
+      warn: '敏感人群注意',
+      bad: '较差',
+    }
+    return labels[aqiLevel.value] ?? aqiLevel.value
+  })
 
-  const homeMode = computed(() => person.value?.state === 'home' ? 'Occupied' : 'Away')
-  const homeSecurity = computed(() => lockArmedState.value?.state === 'off' ? 'Disarmed' : lockArmedState.value?.state ?? 'Unknown')
-  const homeLock = computed(() => lockDoorState.value?.state === 'stuck' ? 'Locked' : lockDoorState.value?.state ?? 'Unknown')
+  const homeMode = computed(() => person.value?.state === 'home' ? '在家' : '离家')
+  const homeSecurity = computed(() => {
+    const state = lockArmedState.value?.state ?? 'unknown'
+    const labels: Record<string, string> = {
+      off: '已撤防',
+      on: '已布防',
+      unavailable: '离线',
+      unknown: '未知',
+    }
+    return labels[state] ?? state
+  })
+  const homeLock = computed(() => {
+    const state = lockDoorState.value?.state ?? 'unknown'
+    const labels: Record<string, string> = {
+      stuck: '已上锁',
+      locked: '已上锁',
+      unlocked: '未上锁',
+      open: '门已开',
+      close: '门已关',
+      unavailable: '离线',
+      unknown: '未知',
+    }
+    return labels[state] ?? state
+  })
   const lockBatteryLevel = computed(() => lockBattery.value?.state ?? '--')
 
-  const primaryMediaPlayer = computed(() => mediaPlayers.value[0] ?? null)
+  const primaryMediaPlayer = computed(() => {
+    return mediaPlayers.value.find((player) => ['playing', 'paused'].includes(player.state))
+      ?? mediaPlayers.value[0]
+      ?? null
+  })
   const currentPlayer = computed(() => primaryMediaPlayer.value?.attributes.friendly_name ?? '逆子')
   const mediaTitle = computed(() => primaryMediaPlayer.value?.attributes.media_title ?? '')
   const mediaArtist = computed(() => primaryMediaPlayer.value?.attributes.media_artist ?? '')
@@ -337,7 +373,30 @@ export function useHa(haBase: () => string, haToken: () => string) {
 
   /* weather dialog */
   const wxState = computed(() => weather.value?.state ?? '')
+  const wxStateLabel = computed(() => {
+    const labels: Record<string, string> = {
+      'clear-night': '晴夜',
+      cloudy: '多云',
+      fog: '有雾',
+      hail: '冰雹',
+      lightning: '雷暴',
+      'lightning-rainy': '雷雨',
+      partlycloudy: '晴间多云',
+      pouring: '暴雨',
+      rainy: '下雨',
+      snowy: '下雪',
+      'snowy-rainy': '雨夹雪',
+      sunny: '晴朗',
+      windy: '有风',
+      'windy-variant': '大风',
+      exceptional: '异常天气',
+      unknown: '未知',
+    }
+    return labels[wxState.value] ?? wxState.value
+  })
   const wxTemp = computed(() => weather.value?.attributes?.temperature ?? '--')
+  const wxHigh = computed(() => todayForecast.value?.temperature ?? '--')
+  const wxLow = computed(() => todayForecast.value?.templow ?? '--')
   const wxFeels = computed(() => weather.value?.attributes?.apparent_temperature ?? '--')
   const wxHum = computed(() => weather.value?.attributes?.humidity ?? '--')
   const wxWind = computed(() => weather.value?.attributes?.wind_bearing ?? '')
@@ -358,12 +417,12 @@ export function useHa(haBase: () => string, haToken: () => string) {
     startWebSocket, stopWebSocket, wsState: websocket.wsState,
     lightsOnCount, curtainOpenCount,
     primaryClimate, primaryFan, climateText, climateMode, climateTemp,
-    weatherText, envTemp, envHumidity, envPm25, aqiLevel,
+    weatherText, envTemp, envHumidity, envPm25, aqiLevel, aqiText,
     homeMode, homeSecurity, homeLock, lockBatteryLevel,
     primaryMediaPlayer, currentPlayer, mediaTitle, mediaArtist, mediaVolume, mediaState,
     mediaPlayPause, mediaNext, mediaPrev, mediaSetVolume,
     vacuumState, vacuumBattery, vacuumName,
-    wxState, wxTemp, wxFeels, wxHum, wxWind, wxWindSpeed,
+    wxState, wxStateLabel, wxTemp, wxHigh, wxLow, wxFeels, wxHum, wxWind, wxWindSpeed,
     wxPressure, wxVis, wxDew, wxCloud, wxUnit,
   }
 }

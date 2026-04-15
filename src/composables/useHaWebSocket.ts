@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { ref } from 'vue'
 import type { HaState } from '../config'
 
 type WsState = 'connecting' | 'connected' | 'authenticated' | 'disconnected' | 'error'
@@ -17,6 +17,14 @@ export function useHaWebSocket(
   let msgId = 1
   let reconnectTimer: number | null = null
   let pingTimer: number | null = null
+  let shouldReconnect = true
+
+  function resetSocket(socket: WebSocket) {
+    socket.onopen = null
+    socket.onmessage = null
+    socket.onerror = null
+    socket.onclose = null
+  }
 
   function getWsUrl() {
     const base = haTarget()
@@ -35,8 +43,18 @@ export function useHaWebSocket(
   }
 
   function connect() {
+    shouldReconnect = true
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+    stopPing()
+
     if (ws) {
-      try { ws.close() } catch { /* ignore */ }
+      const prev = ws
+      ws = null
+      resetSocket(prev)
+      try { prev.close() } catch { /* ignore */ }
     }
 
     const token = haToken()
@@ -47,52 +65,62 @@ export function useHaWebSocket(
 
     try {
       const url = getWsUrl()
-      ws = new WebSocket(url)
+      const socket = new WebSocket(url)
+      ws = socket
       wsState.value = 'connecting'
+
+      socket.onopen = () => {
+        if (ws !== socket) return
+        wsState.value = 'connected'
+      }
+
+      socket.onmessage = (event) => {
+        if (ws !== socket) return
+        let data: any
+        try { data = JSON.parse(event.data) } catch { return }
+
+        if (data.type === 'auth_required') {
+          // Authenticate
+          ws?.send(JSON.stringify({ type: 'auth', access_token: haToken() }))
+        } else if (data.type === 'auth_ok') {
+          wsState.value = 'authenticated'
+          // Subscribe to state changes
+          ws?.send(JSON.stringify({ id: msgId++, type: 'subscribe_events', event_type: 'state_changed' }))
+          startPing()
+        } else if (data.type === 'auth_invalid') {
+          shouldReconnect = false
+          wsState.value = 'error'
+          console.warn('[yumu-ws] auth invalid:', data.message)
+          ws?.close()
+        } else if (data.type === 'event' && data.event?.event_type === 'state_changed') {
+          const newState = data.event.data?.new_state as HaState | undefined
+          if (newState) {
+            onStateChanged(newState.entity_id, newState)
+          }
+        } else if (data.type === 'pong') {
+          // heartbeat ok
+        }
+      }
+
+      socket.onerror = () => {
+        if (ws !== socket) return
+        wsState.value = 'error'
+      }
+
+      socket.onclose = () => {
+        if (ws === socket) {
+          ws = null
+        }
+        stopPing()
+        wsState.value = 'disconnected'
+        if (shouldReconnect) {
+          scheduleReconnect()
+        }
+      }
     } catch {
       wsState.value = 'error'
       scheduleReconnect()
       return
-    }
-
-    ws.onopen = () => {
-      wsState.value = 'connected'
-    }
-
-    ws.onmessage = (event) => {
-      let data: any
-      try { data = JSON.parse(event.data) } catch { return }
-
-      if (data.type === 'auth_required') {
-        // Authenticate
-        ws?.send(JSON.stringify({ type: 'auth', access_token: haToken() }))
-      } else if (data.type === 'auth_ok') {
-        wsState.value = 'authenticated'
-        // Subscribe to state changes
-        ws?.send(JSON.stringify({ id: msgId++, type: 'subscribe_events', event_type: 'state_changed' }))
-        startPing()
-      } else if (data.type === 'auth_invalid') {
-        wsState.value = 'error'
-        console.warn('[yumu-ws] auth invalid:', data.message)
-        ws?.close()
-      } else if (data.type === 'event' && data.event?.event_type === 'state_changed') {
-        const newState = data.event.data?.new_state as HaState | undefined
-        if (newState) {
-          onStateChanged(newState.entity_id, newState)
-        }
-      } else if (data.type === 'pong') {
-        // heartbeat ok
-      }
-    }
-
-    ws.onerror = () => {
-      wsState.value = 'error'
-    }
-
-    ws.onclose = () => {
-      wsState.value = 'disconnected'
-      stopPing()
-      scheduleReconnect()
     }
   }
 
@@ -113,7 +141,7 @@ export function useHaWebSocket(
   }
 
   function scheduleReconnect() {
-    if (reconnectTimer !== null) return
+    if (!shouldReconnect || reconnectTimer !== null) return
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null
       connect()
@@ -121,14 +149,17 @@ export function useHaWebSocket(
   }
 
   function disconnect() {
+    shouldReconnect = false
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
     }
     stopPing()
     if (ws) {
-      try { ws.close() } catch { /* ignore */ }
+      const socket = ws
       ws = null
+      resetSocket(socket)
+      try { socket.close() } catch { /* ignore */ }
     }
     wsState.value = 'disconnected'
   }

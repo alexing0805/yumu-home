@@ -33,51 +33,50 @@ function saveConnection() {
   <div class="dialog-card bg-main" @click.stop>
     <div class="dialog-header">
       <div>
-        <div class="dialog-eyebrow">Display</div>
-        <h3>Settings</h3>
+        <div class="dialog-eyebrow">显示与连接</div>
+        <h3>设置</h3>
       </div>
       <button class="close-button" @click="$emit('close')">✕</button>
     </div>
 
     <div class="settings-list">
       <button class="setting-item" @click="$emit('cycle-theme')">
-        <span>Theme</span>
-        <strong>{{ theme === 'auto' ? 'System' : theme === 'warm' ? 'Warm' : 'Charcoal' }}</strong>
+        <span>主题</span>
+        <strong>{{ theme === 'auto' ? '跟随时间' : theme === 'warm' ? '暖色' : '木炭' }}</strong>
       </button>
 
       <button class="setting-item" @click="$emit('toggle-clock')">
-        <span>Time Format</span>
-        <strong>{{ use24Hour ? '24 Hour' : '12 Hour' }}</strong>
+        <span>时间格式</span>
+        <strong>{{ use24Hour ? '24 小时制' : '12 小时制' }}</strong>
       </button>
 
       <button class="setting-item" @click="$emit('toggle-motion')">
-        <span>Animations</span>
+        <span>动画效果</span>
         <strong :style="{ color: motionEnabled ? '#67b84f' : 'inherit' }">
-          {{ motionEnabled ? 'On' : 'Off' }}
+          {{ motionEnabled ? '开启' : '关闭' }}
         </strong>
       </button>
 
       <button class="setting-item" @click="showConnection = !showConnection">
-        <span>HA Connection</span>
-        <strong>{{ showConnection ? 'Hide ▲' : 'Edit ▼' }}</strong>
+        <span>HA 连接</span>
+        <strong>{{ showConnection ? '收起 ▲' : '编辑 ▼' }}</strong>
       </button>
     </div>
 
-    <!-- HA Connection editor -->
     <div v-if="showConnection" class="settings-connection">
       <label class="setting-field">
-        <span>API Base URL</span>
+        <span>API 基础地址</span>
         <input v-model="editBase" type="text" placeholder="/ha-api" />
       </label>
       <label class="setting-field">
-        <span>Long-Lived Access Token</span>
+        <span>长期访问令牌</span>
         <input v-model="editToken" type="password" placeholder="eyJh..." />
       </label>
-      <button class="setting-save" @click="saveConnection">Save & Reconnect</button>
+      <button class="setting-save" @click="saveConnection">保存并重连</button>
     </div>
 
     <div class="settings-hint" style="text-align: center;">
-      HA connection strings are stored locally on this device.
+      连接信息仅保存在当前这台设备本地。
     </div>
   </div>
 </template>

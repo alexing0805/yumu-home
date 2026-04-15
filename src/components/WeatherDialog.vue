@@ -6,6 +6,7 @@ defineProps<{
   title: string
   weatherText: string
   wxState: string
+  wxStateLabel: string
   wxTemp: string | number
   wxFeels: string | number
   wxHum: string | number
@@ -27,7 +28,7 @@ function fmtDate(iso: string) {
   const d = new Date(iso)
   const today = new Date()
   if (d.toDateString() === today.toDateString()) return '今天'
-  return `${d.getMonth() + 1}/${d.getDate()} ${WEEKDAY_NAMES[d.getDay()]}`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${WEEKDAY_NAMES[d.getDay()]}`
 }
 </script>
 
@@ -40,7 +41,7 @@ function fmtDate(iso: string) {
       </div>
       <button class="close-button" @click="$emit('close')">关闭</button>
     </header>
-    <p class="dialog-summary">{{ weatherText }} · {{ wxState }}</p>
+    <p class="dialog-summary">{{ weatherText }} · {{ wxStateLabel || wxState }}</p>
 
     <!-- 当前天气 -->
     <div class="wx-current">

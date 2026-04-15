@@ -99,12 +99,12 @@ export type ThemeMode = 'warm' | 'charcoal' | 'auto'
 export type PanelKey = 'weather' | 'climate' | 'lights' | 'curtains' | 'air' | 'summary' | 'music'
 
 export const SCENE_LABELS = [
-  { id: 'home', label: 'Back Home', icon: '🏠' },
-  { id: 'away', label: 'Leave Home', icon: '🚪' },
-  { id: 'cinema', label: 'Movie Night', icon: '🎬' },
-  { id: 'sleep', label: 'Bedtime', icon: '🌙' },
-  { id: 'dining', label: 'Dining', icon: '🍽️' },
-  { id: 'all_off', label: 'All Off', icon: '⭕' },
+  { id: 'home', label: '回家', icon: '🏠' },
+  { id: 'away', label: '离家', icon: '🚪' },
+  { id: 'cinema', label: '观影', icon: '🎬' },
+  { id: 'sleep', label: '睡眠', icon: '🌙' },
+  { id: 'dining', label: '用餐', icon: '🍽️' },
+  { id: 'all_off', label: '全关', icon: '⭕' },
 ] as const
 
 export const WEATHER_ICON: Record<string, string> = {
